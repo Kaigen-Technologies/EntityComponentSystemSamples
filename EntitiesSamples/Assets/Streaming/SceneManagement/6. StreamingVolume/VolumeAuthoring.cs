@@ -18,7 +18,7 @@ namespace Streaming.SceneManagement.StreamingVolume
 
                AddComponent(entity, new StreamingGO
                {
-                    InstanceID = authoring.gameObject.GetInstanceID()
+                    InstanceID = authoring.gameObject.GetEntityId()
                });
             }
         }
@@ -31,6 +31,6 @@ namespace Streaming.SceneManagement.StreamingVolume
 
     public struct StreamingGO : IComponentData
     {
-        public int InstanceID;
+        public UnityEngine.EntityId InstanceID;
     }
 }

@@ -19,12 +19,12 @@ namespace Streaming.SceneManagement.StreamingVolume
 
         public void OnUpdate(ref SystemState state)
         {
-            NativeHashSet<int> selectedGameObjectsIds = new NativeHashSet<int>(100, Allocator.TempJob);
+            NativeHashSet<UnityEngine.EntityId> selectedGameObjectsIds = new NativeHashSet<UnityEngine.EntityId>(100, Allocator.TempJob);
 #if UNITY_EDITOR
             var selectedObjs = Selection.gameObjects;
             foreach (var selected in selectedObjs)
             {
-                selectedGameObjectsIds.Add(selected.GetInstanceID());
+                selectedGameObjectsIds.Add(selected.GetEntityId());
             }
 #endif
 
@@ -69,7 +69,7 @@ namespace Streaming.SceneManagement.StreamingVolume
         [BurstCompile]
         public partial struct DrawBBJob : IJobEntity
         {
-            [ReadOnly] public NativeHashSet<int> selectedGOIds;
+            [ReadOnly] public NativeHashSet<UnityEngine.EntityId> selectedGOIds;
             public bool checkGO;
             public Color color;
 
@@ -90,7 +90,7 @@ namespace Streaming.SceneManagement.StreamingVolume
         [BurstCompile]
         public partial struct DrawBBSceneJob : IJobEntity
         {
-            [ReadOnly] public NativeHashSet<int> selectedGOIds;
+            [ReadOnly] public NativeHashSet<UnityEngine.EntityId> selectedGOIds;
             [ReadOnly] public ComponentLookup<Volume> streamingVolumeLookUp;
             [ReadOnly] public ComponentLookup<LocalToWorld> localToWorldLookUp;
             public bool checkGO;

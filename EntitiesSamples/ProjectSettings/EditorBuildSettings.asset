@@ -6,6 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Graphical/AnimateGameObject/AnimateGameObject.unity
-    guid: ed1f53409f9586b4a86c2649cac59ea3
+    path: Assets/Boids/Boids.unity
+    guid: d5f3505c0b377452db53363d84547627
   m_configObjects: {}

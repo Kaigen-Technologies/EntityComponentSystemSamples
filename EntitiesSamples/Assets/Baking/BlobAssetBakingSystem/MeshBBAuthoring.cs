@@ -27,7 +27,7 @@ namespace Baking.BlobAssetBakingSystem
 
                 var hasMesh = mesh != null;
                 var assetPath = AssetDatabase.GetAssetPath(mesh);
-                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(mesh.GetInstanceID(), out string guid, out long localId);
+                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(mesh.GetEntityId(), out string guid, out long localId);
                 Hash128 hash = default;
 
                 // Here we get a hash from the mesh to use it later to de-duplicate the blob assets
