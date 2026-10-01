@@ -8,50 +8,94 @@ using Unity.Transforms;
 
 namespace Boids
 {
-    [RequireMatchingQueriesForUpdate]
+    // Flock size control. The spawn system owns the singleton; the UI writes Delta and reads Count.
+    public struct BoidPopulation : IComponentData
+    {
+        public int Count;
+        public int Delta;   // fish to add (+) or remove (-) on the next update
+        public bool Started;
+    }
+
     [BurstCompile]
     public partial struct BoidSchoolSpawnSystem : ISystem
     {
+        public const int StartCount = 10000;
+
+        EntityQuery m_NewBoidQuery;
         EntityQuery m_BoidQuery;
+        EntityQuery m_SchoolQuery;
+        ComponentLookup<LocalToWorld> m_LocalToWorldLookup;
 
         public void OnCreate(ref SystemState state)
         {
-            m_BoidQuery = new EntityQueryBuilder(Allocator.Temp).WithAll<Boid, LocalTransform>().Build(ref state);
+            m_NewBoidQuery = new EntityQueryBuilder(Allocator.Temp).WithAll<Boid, LocalTransform>().Build(ref state);
+            m_BoidQuery = new EntityQueryBuilder(Allocator.Temp).WithAll<Boid>().Build(ref state);
+            m_SchoolQuery = new EntityQueryBuilder(Allocator.Temp).WithAll<BoidSchool, LocalToWorld>().Build(ref state);
+            m_LocalToWorldLookup = state.GetComponentLookup<LocalToWorld>();
+            state.EntityManager.CreateSingleton<BoidPopulation>();
+            state.RequireForUpdate(m_SchoolQuery);
         }
 
         public void OnUpdate(ref SystemState state)
         {
-            var localToWorldLookup = SystemAPI.GetComponentLookup<LocalToWorld>();
-            var ecb = new EntityCommandBuffer(Allocator.Temp);
-            var world = state.World.Unmanaged;
+            // read by value: the structural changes below invalidate any ref into the singleton
+            var population = SystemAPI.GetSingleton<BoidPopulation>();
+            int spawn = 0;
+            if (!population.Started)
+            {
+                spawn = StartCount;
+                population.Started = true;
+            }
+            else if (population.Delta > 0)
+            {
+                spawn = population.Delta;
+            }
+            else if (population.Delta < 0)
+            {
+                var boids = m_BoidQuery.ToEntityArray(Allocator.Temp);
+                int remove = math.min(-population.Delta, boids.Length);
+                state.EntityManager.DestroyEntity(boids.GetSubArray(0, remove));
+            }
+            population.Delta = 0;
 
-            foreach (var (boidSchool, boidSchoolLocalToWorld, entity) in
-                     SystemAPI.Query<RefRO<BoidSchool>, RefRO<LocalToWorld>>()
-                         .WithEntityAccess())
+            if (spawn > 0)
+                Spawn(ref state, spawn);
+
+            population.Count = m_BoidQuery.CalculateEntityCount();
+            SystemAPI.SetSingleton(population);
+        }
+
+        // splits `total` fish across the schools, placed on a sphere around each school
+        void Spawn(ref SystemState state, int total)
+        {
+            var schools = m_SchoolQuery.ToComponentDataArray<BoidSchool>(Allocator.Temp);
+            var schoolTransforms = m_SchoolQuery.ToComponentDataArray<LocalToWorld>(Allocator.Temp);
+            int perSchool = total / schools.Length;
+            if (perSchool == 0)
+                return;
+
+            var world = state.WorldUnmanaged;
+            for (int s = 0; s < schools.Length; s++)
             {
                 var boidEntities =
-                    CollectionHelper.CreateNativeArray<Entity, RewindableAllocator>(boidSchool.ValueRO.Count,
-                        ref world.UpdateAllocator);
+                    CollectionHelper.CreateNativeArray<Entity, RewindableAllocator>(perSchool, ref world.UpdateAllocator);
+                state.EntityManager.Instantiate(schools[s].Prefab, boidEntities);
 
-                state.EntityManager.Instantiate(boidSchool.ValueRO.Prefab, boidEntities);
-
+                m_LocalToWorldLookup.Update(ref state);
                 var setBoidLocalToWorldJob = new SetBoidLocalToWorld
                 {
-                    LocalToWorldFromEntity = localToWorldLookup,
+                    LocalToWorldFromEntity = m_LocalToWorldLookup,
                     Entities = boidEntities,
-                    Center = boidSchoolLocalToWorld.ValueRO.Position,
-                    Radius = boidSchool.ValueRO.InitialRadius
+                    Center = schoolTransforms[s].Position,
+                    Radius = schools[s].InitialRadius
                 };
-                state.Dependency = setBoidLocalToWorldJob.Schedule(boidSchool.ValueRO.Count, 64, state.Dependency);
+                state.Dependency = setBoidLocalToWorldJob.Schedule(perSchool, 64, state.Dependency);
                 state.Dependency.Complete();
-
-                ecb.DestroyEntity(entity);
             }
 
-            ecb.Playback(state.EntityManager);
             // TODO: all Prefabs are currently forced to TransformUsageFlags.Dynamic by default, which means boids get a LocalTransform
             // they don't need. As a workaround, remove the component at spawn-time.
-            state.EntityManager.RemoveComponent<LocalTransform>(m_BoidQuery);
+            state.EntityManager.RemoveComponent<LocalTransform>(m_NewBoidQuery);
         }
     }
 
